@@ -2,9 +2,8 @@ from pathlib import Path
 
 
 def extract_text_from_pdf(pdf_path: Path) -> str:
-    # Import the PDF library inside the function.
-    # That way, the program can still show --help even if the dependency
-    # is not installed yet.
+    # Import inside the function so the CLI can still start even if
+    # PyMuPDF is not installed yet.
     import fitz
 
     # Fail early if the file path is wrong.

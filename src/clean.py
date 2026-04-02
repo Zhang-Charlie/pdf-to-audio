@@ -1,51 +1,59 @@
 import re
 
 
-# A line that only contains digits is often a page number like "12".
-PAGE_NUMBER_PATTERN = re.compile(r"(?m)^\s*\d+\s*$")
-
-# PDFs often split words across lines:
+# PDFs often split a word across lines like:
 # exam-
 # ple
-# This pattern lets us turn that back into "example".
-HYPHENATED_LINE_BREAK_PATTERN = re.compile(r"(\w)-\n(\w)")
+# This regex turns that back into "example".
+HYPHENATED_WORD_PATTERN = re.compile(r"(\w)-\s*\n\s*(\w)")
 
-# A single newline inside a paragraph usually should become a space.
-# Double newlines are treated as paragraph breaks and are preserved.
-SINGLE_LINE_BREAK_PATTERN = re.compile(r"(?<!\n)\n(?!\n)")
+# A single newline inside a paragraph is usually just a wrapped line,
+# not a real paragraph break. Double newlines are left alone.
+BROKEN_LINE_BREAK_PATTERN = re.compile(r"(?<!\n)\n(?!\n)")
 
-# Collapse runs of spaces and tabs into one normal space.
-MULTI_SPACE_PATTERN = re.compile(r"[ \t]+")
+# Replace runs of spaces or tabs with one normal space.
+EXTRA_SPACES_PATTERN = re.compile(r"[ \t]+")
 
-# Remove awkward spaces before punctuation like "word ," -> "word,"
-SPACE_BEFORE_PUNCTUATION_PATTERN = re.compile(r"\s+([,.;:!?])")
+# Clean up spaces around newline characters.
+SPACES_AROUND_NEWLINES_PATTERN = re.compile(r" *\n *")
 
-# If we end up with lots of blank lines, shrink them down.
-MULTI_BLANK_LINE_PATTERN = re.compile(r"\n{3,}")
+# If there are too many blank lines, reduce them to one empty line.
+MULTI_BLANK_LINES_PATTERN = re.compile(r"\n{3,}")
 
 
 def clean_text(text: str) -> str:
-    # Normalize different newline styles to "\n".
-    # Windows often uses \r\n while some files may contain \r.
-    cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Run the text through each cleaning step in order.
+    cleaned = normalize_line_endings(text)
+    cleaned = fix_hyphenated_words(cleaned)
+    cleaned = fix_broken_line_breaks(cleaned)
+    cleaned = remove_extra_spaces(cleaned)
+    return cleaned
 
-    # Remove simple page numbers on their own lines.
-    cleaned = PAGE_NUMBER_PATTERN.sub("", cleaned)
 
-    # Fix words broken by a hyphen at the end of a line.
-    cleaned = HYPHENATED_LINE_BREAK_PATTERN.sub(r"\1\2", cleaned)
+def normalize_line_endings(text: str) -> str:
+    # Convert Windows and old-style line endings into "\n".
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
-    # Turn single line breaks into spaces so sentences flow normally.
-    cleaned = SINGLE_LINE_BREAK_PATTERN.sub(" ", cleaned)
 
-    # Remove extra spaces and tabs.
-    cleaned = MULTI_SPACE_PATTERN.sub(" ", cleaned)
+def fix_hyphenated_words(text: str) -> str:
+    # Join words broken by a hyphen at the end of a line.
+    return HYPHENATED_WORD_PATTERN.sub(r"\1\2", text)
 
-    # Remove spaces before punctuation marks.
-    cleaned = SPACE_BEFORE_PUNCTUATION_PATTERN.sub(r"\1", cleaned)
 
-    # Reduce large blank gaps to normal paragraph spacing.
-    cleaned = MULTI_BLANK_LINE_PATTERN.sub("\n\n", cleaned)
+def fix_broken_line_breaks(text: str) -> str:
+    # Turn wrapped lines inside a paragraph into spaces.
+    return BROKEN_LINE_BREAK_PATTERN.sub(" ", text)
 
-    # Strip leading and trailing whitespace from the final result.
+
+def remove_extra_spaces(text: str) -> str:
+    # Collapse repeated spaces and tabs.
+    cleaned = EXTRA_SPACES_PATTERN.sub(" ", text)
+
+    # Remove extra spaces that sit directly next to newlines.
+    cleaned = SPACES_AROUND_NEWLINES_PATTERN.sub("\n", cleaned)
+
+    # Keep paragraph spacing simple and consistent.
+    cleaned = MULTI_BLANK_LINES_PATTERN.sub("\n\n", cleaned)
+
+    # Remove whitespace at the very start and end of the final text.
     return cleaned.strip()
