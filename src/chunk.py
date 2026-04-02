@@ -1,81 +1,51 @@
 import re
 
 
-# Split on whitespace that comes after sentence-ending punctuation.
-# This is a simple heuristic, not a full grammar parser.
-SENTENCE_BOUNDARY_PATTERN = re.compile(r"(?<=[.!?])\s+")
+# Split text at sentence boundaries like ".", "!" or "?" followed by whitespace.
+# This is a simple rule, but it works well enough for a basic local tool.
+SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+")
 
 
-def chunk_text(text: str, max_chars: int = 1200) -> list[str]:
-    # A chunk size of zero or less makes no sense.
+def chunk_text(text: str, max_chars: int = 2000) -> list[str]:
+    # The chunk size must be a positive number.
     if max_chars <= 0:
         raise ValueError("max_chars must be greater than zero")
 
-    # Double newlines represent paragraph boundaries after cleaning.
-    paragraphs = [paragraph.strip() for paragraph in text.split("\n\n") if paragraph.strip()]
+    # Break the text into sentences first so we do not cut them in half.
+    sentences = split_into_sentences(text)
     chunks: list[str] = []
-    current = ""
+    current_chunk = ""
 
-    for paragraph in paragraphs:
-        # First split each paragraph into sentence-sized pieces.
-        for sentence in _split_paragraph(paragraph, max_chars):
-            if not current:
-                current = sentence
-                continue
+    for sentence in sentences:
+        # Start a new chunk with the first sentence.
+        if not current_chunk:
+            current_chunk = sentence
+            continue
 
-            # Try to add the next sentence to the current chunk.
-            candidate = f"{current} {sentence}".strip()
-            if len(candidate) <= max_chars:
-                current = candidate
-            else:
-                # If adding it would make the chunk too large,
-                # save the current chunk and start a new one.
-                chunks.append(current)
-                current = sentence
+        # Try to add the next full sentence to the current chunk.
+        candidate = f"{current_chunk} {sentence}"
+        if len(candidate) <= max_chars:
+            current_chunk = candidate
+        else:
+            # If adding the sentence would make the chunk too large,
+            # save the current chunk and start a new one.
+            chunks.append(current_chunk)
+            current_chunk = sentence
 
-    # Add the final unfinished chunk, if there is one.
-    if current:
-        chunks.append(current)
+    # Add the final chunk after the loop ends.
+    if current_chunk:
+        chunks.append(current_chunk)
 
     return chunks
 
 
-def _split_paragraph(paragraph: str, max_chars: int) -> list[str]:
-    # Break a paragraph into sentences, trimming whitespace.
-    sentences = [sentence.strip() for sentence in SENTENCE_BOUNDARY_PATTERN.split(paragraph) if sentence.strip()]
-    parts: list[str] = []
+def split_into_sentences(text: str) -> list[str]:
+    # Remove leading and trailing whitespace first.
+    cleaned = text.strip()
+    if not cleaned:
+        return []
 
-    # If sentence splitting finds nothing useful, fall back to the full paragraph.
-    for sentence in sentences or [paragraph]:
-        if len(sentence) <= max_chars:
-            parts.append(sentence)
-        else:
-            # Very long sentences still need to be broken down further.
-            parts.extend(_split_long_text(sentence, max_chars))
-
-    return parts
-
-
-def _split_long_text(text: str, max_chars: int) -> list[str]:
-    # Last-resort splitting: build chunks word by word.
-    # This avoids cutting in the middle of a word.
-    words = text.split()
-    parts: list[str] = []
-    current = ""
-
-    for word in words:
-        if not current:
-            current = word
-            continue
-
-        candidate = f"{current} {word}"
-        if len(candidate) <= max_chars:
-            current = candidate
-        else:
-            parts.append(current)
-            current = word
-
-    if current:
-        parts.append(current)
-
-    return parts
+    # Split the text into sentences using punctuation as the boundary.
+    # If the text has no sentence punctuation, this returns the whole text
+    # as one chunk, which is still better than breaking a sentence apart.
+    return [sentence.strip() for sentence in SENTENCE_PATTERN.split(cleaned) if sentence.strip()]
